@@ -4,7 +4,7 @@ function coefftrain!(DATA, name; ep::Int=100, bs::Int=2)
     model = model |> gpu
     opt = setup(Flux.Adam(), model)
     loss_log = Float32[]
-    CUDA.@sync for ii ∈ 1:ep::Int
+    CUDA.@sync for ii ∈ 1:ep
         l1 = Float32[]
         for (input, label) ∈ SET
             loss, grads = withgradient(model) do m

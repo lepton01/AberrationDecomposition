@@ -14,6 +14,7 @@ function datagen_real(resol::Int, n::Int, J; pc::Bool=false)
     return DATA_train
 end
 datagen_real(2, 1, [0]::Vector{Int});
+#=
 function ajuste(A, n)
     A[n+1:end-n, n+1:end-n]
 end
@@ -39,6 +40,7 @@ function lnr(s::String)
     h = Plots.heatmap(X_r[1, :], Y_r[:, 1], A[:, :, 1, 1], aspect_ratio=1)
     return A, h, (X_r, Y_r)
 end
+=#
 function test_real(input::Array{<:AbstractFloat,2}, J::Vector{Int}, name::String)
     BSON.@load name * ".bson" model
     model = model |> gpu
@@ -66,7 +68,7 @@ function sample_real(np, J)
     ϕ = evaluateZernike(np, J, coeff)
     return coeff, ϕ
 end
-function validation_real(data, model::String, mode::Symbol=:CPU, pc::Bool=false)
+function validation_real(data, model::String, mode::Symbol=:CPU; pc::Bool=false)
     ϕs, coef = data
     out = similar(coef)
     if mode == :CPU

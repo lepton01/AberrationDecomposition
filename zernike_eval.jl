@@ -290,12 +290,12 @@ julia> W = evaluateZernike(64,[5, 6],[0.3, 4.1])
 function evaluateZernike(N::Int, J::Vector{Int}, coefficients::AbstractArray{T,1}; index=:OSA) where {T}
     X = range(-one(T), one(T), length=N)
     Y = range(-one(T), one(T), length=N) |> transpose
-    out_arr = zeros(T, N, N)
+    out = zeros(T, N, N)
     for jj ∈ 1:length(J)
         Z = Zernike(J[jj], coord=:cartesian, index=index)
-        out_arr .+= coefficients[jj] .* Z.(X, Y)
+        out .+= coefficients[jj] .* Z.(X, Y)
     end
-    return out_arr
+    return out
 end
 
 """
@@ -311,18 +311,18 @@ julia> W = evaluateZernike(64,[5, 6],[0.3, 4.1])
 function evaluateZernike(X::AbstractArray{<:AbstractFloat,1}, J::Vector{Int},
     coefficients::Vector{T}; index=:OSA) where {T}
     N = length(X)
-    out_arr = zeros(T, N, N)
+    out = zeros(T, N, N)
     for j ∈ 1:length(J)
         Z = Zernike(J[j], coord=:cartesian, index=index)
-        out_arr .+= coefficients[j] .* Z.(X, X')
+        out .+= coefficients[j] .* Z.(X, X')
     end
-    return out_arr
+    return out
 end
 
 function evaluateZernike(n::Int, J::Int, coefficients::T; index=:OSA) where {T}
-    return evaluateZernike(n, [J], [coefficients]; index=index)
+    return evaluateZernike(n, [J], [coefficients], index=index)
 end
 
 function evaluateZernike(X::AbstractArray{<:AbstractFloat,1}, J::Int, coefficients::T; index=:OSA) where {T}
-    return evaluateZernike(X, [J], [coefficients]; index=index)
+    return evaluateZernike(X, [J], [coefficients], index=index)
 end

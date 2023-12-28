@@ -7,30 +7,30 @@ using Flux, MAT, CUDA
 using Flux: DataLoader, setup, withgradient, update!, mae, mse
 
 "zernike_eval.jl" |> include
-const J::Vector{Int} = [aa for aa ∈ 1:20]# order of the function, OSA indexing (Zⱼ)
+const J::Vector{Int} = [aa for aa ∈ 1:20]# Zernike orders to use, OSA indexing (Zⱼ)
 const res::Int = 2^7# resolution of the image
-const num::Int = 5_000# number of generated data
-const num_test::Int = 1_000# number of generated data
+const num::Int = 5_000# number of training data
+const num_test::Int = 1_000# number of testing data
 const iter::Int = 50# number of epochs to train
-const x = range(-1.0f0, 1.0f0, res)# to evaluate the ZernikePolynomials
+const x = range(-1.0f0, 1.0f0, res)# to evaluate the Zernike Polynomials
 model_name::String = "conv_real_$(res)_004_$(length(J))order"# name of the model to use
 "model_real_$(res).jl" |> include
-#"train.jl" |> include
+"train.jl" |> include
 "fun_real.jl" |> include
 
-## MODEL CREATION AND DATA GENERATION
-@time modelcreateconv128_real(J |> length, model_name)# create new model
+## MODEL CREATION AND DATA GENERATION (CHOOSE)
+@time modelcreateconv128_real(J |> length, model_name)# create new model 1
+@time modelcreateconv128_real2(J |> length, model_name)# create new model 2
 
 ## TRAINING DATA GENERATION AND EXPORT
-@time TRAIN = datagen_real(res, num, J);# create training data
-#@time TRAIN2 = datagen_real(res, num, J, true);
-
-Serialization.serialize("$(res)_real_train_$(num)_$(length(J))_order", TRAIN);
+@time TRAIN = datagen_real(res, num, J);# false to use single-threading
+@time TRAIN2 = datagen_real(res, num, J, true);# true to use multi-threading
+Serialization.serialize("$(res)_real_train_$(num)_$(length(J))_order", TRAIN);# save to folder
 
 ## TESTING DATA GENERATION AND EXPORT
-@time TEST = datagen_real(res, num_test, J);# create testing data
-#@time TEST = datagen_real(res, num_test, J, true);
-Serialization.serialize("$(res)_real_test_$(num_test)_$(length(J))order", TEST);
+@time TEST = datagen_real(res, num_test, J);# false (use single-threading)
+@time TEST = datagen_real(res, num_test, J, true);# true (use multi-threading)
+Serialization.serialize("$(res)_real_test_$(num_test)_$(length(J))order", TEST);# save to folder
 
 ## TRAINING
 function train(n, model::String)
@@ -70,7 +70,7 @@ data_test = data_test[1][:, :, 1, n_r], data_test[2][:, n_r];
 @time acc, error_cuad_medio, coefs = validation_real(data_test, model_name, :GPU)
 aa = vec((coefs[1] .- coefs[2]) ./ coefs[2]);
 Plots.histogram(aa, legend=false)
-
+#=
 ## IMPORT SIM DATA
 const ss1::String = "z_ojo_Normal.mat"
 const ss2::String = "z_tilt_pi32.mat"
@@ -86,10 +86,10 @@ zq1 = g.(view(zq, :, :))
 Plots.heatmap(zq, aspect_ratio=1)
 zq = zq .- zq[end÷2, end÷2]
 zq2 = g.(view(zq, :, :))
-
 #Plots.heatmap(zq1)
 #Plots.heatmap(zq2)
-
+=#
+#=
 #@read file xq
 #@read file yq
 #m = maximum(xq)
@@ -104,14 +104,14 @@ input2, heat2, (X2, Y2) = lnr(ss2)
 Plots.heatmap(heat1, ascpect_ratio=1, xlabel="x", ylabel="y", title="Preprocessed for input")
 #Plots.plot(heat1, heat2, layout=(1, 2), aspect_ratio=1)
 #Plots.heatmap(x, x, evaluateZernike(128, [2], [1.0]), aspect_ratio=1)
-
-## VALIDATION
+=#
+## VALIDATION (SINGLE)
 @time coef, B, P = sample_real(res, J)
 @time C, F0, p0 = test_real(B, J, model_name);
 P
 Plots.plot(p0, aspect_ratio=1, ylabel="px", xlabel="px")
 Plots.plot([coef C], label=["input" "output"], linewidth=2, xlabel="Zernike OSA index (1-$(J |> length))", ylabel="value")
-
+#=
 ## REAL DATA SET
 @time CC1, F1, p1 = test(input1, model_name);
 @time CC2, F2, p2 = test(input2, model_name);
@@ -129,3 +129,4 @@ F_normal = F11 .+ (NaN .* (X1 .^ 2 .+ Y1 .^ 2 .≥ 1.0))
 #heatmap(F2[1] .- Z_comp2)
 #surface(-F_normal)
 Plots.heatmap(-F_normal, title="Postprocessed", aspect_ratio=1, ylabel="px", xlabel="px")
+=#
