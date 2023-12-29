@@ -13,7 +13,7 @@ function datagen_real(resol::Int, n::Int, J; pc::Bool=false)
     DATA_train = ϕ_train, c_train# create the training dataset tuple
     return DATA_train
 end
-datagen_real(2, 1, [0]::Vector{Int});
+datagen_real(2, 1, [0]);
 #=
 function ajuste(A, n)
     A[n+1:end-n, n+1:end-n]
@@ -41,7 +41,7 @@ function lnr(s::String)
     return A, h, (X_r, Y_r)
 end
 =#
-function test_real(input::Array{<:AbstractFloat,2}, J::Vector{Int}, name::String)
+function test_real_single(input::Array{<:AbstractFloat,2}, J, name::String)
     BSON.@load name * ".bson" model
     model = model |> gpu
     input = reshape(input, (res, res, 1, 1))
@@ -49,28 +49,31 @@ function test_real(input::Array{<:AbstractFloat,2}, J::Vector{Int}, name::String
     ϕ::Array{Float32,2} = evaluateZernike(res, J, out)
     return out, ϕ
 end
-function test_real(input::Array{<:AbstractFloat,4}, J::Vector{Int}, name::String)
+function test_real(input::Array{<:AbstractFloat,4}, J, name::String)
     BSON.@load name * ".bson" model
     model = model |> gpu
-    out::Vector{Float64} = model(input |> gpu) |> cpu |> vec
+    out::Vector{Float64} = input |> gpu |> model |> cpu |> vec
     ϕ::Array{Float32,2} = evaluateZernike(res, J, out)
     return out, ϕ
 end
-function test_real_CPU(input::Array{<:AbstractFloat,2}, J::Vector{Int}, name::String)
+function test_real(input::Array{<:AbstractFloat,2}, J, name::String)
+    return test_real(reshape(input, (res, res, 1, 1)), J, name)
+end
+function test_real_CPU(input::Array{<:AbstractFloat,2}, J, name::String)
     BSON.@load name * ".bson" model
     input = reshape(input, (res, res, 1, 1))
     out::Vector{Float64} = input |> model |> vec
     ϕ::Array{Float32,2} = evaluateZernike(res, J, out)
     return out, ϕ
 end
-function sample_real(np, J)
-    coeff = randn32(J |> length)
-    ϕ = evaluateZernike(np, J, coeff)
-    return coeff, ϕ
+function sample_real(np::Int, J)
+    C = randn32(J |> length)
+    ϕ = evaluateZernike(np, J, C)
+    return C, ϕ
 end
 function validation_real(data, model::String, mode::Symbol=:CPU; pc::Bool=false)
-    ϕs, coef = data
-    out = similar(coef)
+    ϕs, C = data
+    out = C |> similar
     if mode == :CPU
         if pc == false
             for ii ∈ axes(ϕs, 3)
@@ -83,8 +86,8 @@ function validation_real(data, model::String, mode::Symbol=:CPU; pc::Bool=false)
         end
     elseif mode == :GPU
         for ii ∈ axes(ϕs, 3)
-            out[:, ii], _ = test_real(ϕs[:, :, ii], J, model)
+            out[:, ii], _ = test_real_single(ϕs[:, :, ii], J, model)
         end
     end
-    return mean(isapprox.(out, coef, rtol=0.1)), (out .- coef) .|> (x -> x^2) |> mean |> sqrt, (out, coef)
+    return mean(isapprox.(out, C, rtol=0.1)), (out .- C) .|> (x -> x^2) |> mean |> sqrt, out, C
 end

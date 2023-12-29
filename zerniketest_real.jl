@@ -2,14 +2,13 @@
 # Angel M. Ortiz-Ochoa, foton.angel@gmail.com
 # 20/04/2023
 import Plots, ImageTransformations as IT, BSON, Serialization
-using LinearAlgebra, Statistics
+using LinearAlgebra, Statistics, Random
 using Flux, MAT, CUDA
 using Flux: DataLoader, setup, withgradient, update!, mae, mse
-
 "zernike_eval.jl" |> include
 const J::Vector{Int} = [aa for aa ∈ 1:20]# Zernike orders to use, OSA indexing (Zⱼ)
 const res::Int = 2^7# resolution of the image
-const num::Int = 5_000# number of training data
+const num_train::Int = 5_000# number of training data
 const num_test::Int = 1_000# number of testing data
 const iter::Int = 50# number of epochs to train
 const x = range(-1.0f0, 1.0f0, res)# to evaluate the Zernike Polynomials
@@ -22,20 +21,20 @@ model_name::String = "conv_real_$(res)_004_$(length(J))order"# name of the model
 @time modelcreateconv128_real(J |> length, model_name)# create new model 1
 @time modelcreateconv128_real2(J |> length, model_name)# create new model 2
 
-## TRAINING DATA GENERATION AND EXPORT
-@time TRAIN = datagen_real(res, num, J);# false to use single-threading
-@time TRAIN2 = datagen_real(res, num, J, true);# true to use multi-threading
-Serialization.serialize("$(res)_real_train_$(num)_$(length(J))_order", TRAIN);# save to folder
+## TRAINING DATA GENERATION AND EXPORT (CHOOSE)
+@time TRAIN = datagen_real(res, num_train, J);# false to use single-threading
+@time TRAIN2 = datagen_real(res, num_train, J, true);# true to use multi-threading
+Serialization.serialize("$(res)_real_train_$(num_train)_$(length(J))_order", TRAIN);# save to folder
 
-## TESTING DATA GENERATION AND EXPORT
+## TESTING DATA GENERATION AND EXPORT (CHOOSE)
 @time TEST = datagen_real(res, num_test, J);# false (use single-threading)
 @time TEST = datagen_real(res, num_test, J, true);# true (use multi-threading)
 Serialization.serialize("$(res)_real_test_$(num_test)_$(length(J))order", TEST);# save to folder
 
 ## TRAINING
 function train(n, model::String)
-    TRAIN = Serialization.deserialize("$(res)_real_train_$(num)_$(length(J))_order")
-    n_r = rand(1:num, n)
+    TRAIN = Serialization.deserialize("$(res)_real_train_$(num_train)_$(length(J))_order")
+    n_r = rand(1:num_train, n)
     TRAIN = TRAIN[1][:, :, :, n_r], TRAIN[2][:, n_r]
     return coefftrain!(TRAIN, model, ep=iter, bs=32)
 end
@@ -43,9 +42,9 @@ train(5_000, model_name)
 coefftrain!(TRAIN, model_name, ep=iter, bs=32)
 
 ## TESTING
-function testing(num, model, mode=:CPU)
+function testing(n, model, mode=:CPU)
     data = Serialization.deserialize("$(res)_real_test_$(num_test)_$(length(J))order")
-    n_r = rand(1:num_test, num)
+    n_r = rand(1:num_test, n)
     data = data[1][:, :, 1, n_r], data[2][:, n_r]
     return validation_real(data, model, mode)
 end
@@ -54,8 +53,10 @@ function __init__()
     testing(1, model_name, :GPU)
 end
 @time __init__();
+
 @time acc, error_cuad_medio, coefs = testing(1_000, model_name)
 @time acc, error_cuad_medio, coefs = testing(1_000, model_name, :GPU)
+
 aa = vec((coefs[1] .- coefs[2]) ./ coefs[2]);
 Plots.histogram(aa, legend=false)
 
@@ -66,8 +67,8 @@ data_test = data_test[1][:, :, 1, :], data_test[2][:, :];
 n_r = rand(1:num_test, 1_000);
 data_test = data_test[1][:, :, 1, n_r], data_test[2][:, n_r];
 
-@time acc, error_cuad_medio, coefs = validation_real(data_test, model_name)
-@time acc, error_cuad_medio, coefs = validation_real(data_test, model_name, :GPU)
+@time acc, error_cuad_medio, OUT, coefs = validation_real(data_test, model_name)
+@time acc, error_cuad_medio, OUT, coefs = validation_real(data_test, model_name, :GPU)
 aa = vec((coefs[1] .- coefs[2]) ./ coefs[2]);
 Plots.histogram(aa, legend=false)
 #=
