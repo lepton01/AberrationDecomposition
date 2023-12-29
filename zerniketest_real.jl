@@ -23,7 +23,7 @@ model_name::String = "conv_real_$(res)_004_$(length(J))order"# name of the model
 
 ## TRAINING DATA GENERATION AND EXPORT (CHOOSE)
 @time TRAIN = datagen_real(res, num_train, J);# false to use single-threading
-@time TRAIN2 = datagen_real(res, num_train, J, true);# true to use multi-threading
+@time TRAIN = datagen_real(res, num_train, J, true);# true to use multi-threading
 Serialization.serialize("$(res)_real_train_$(num_train)_$(length(J))_order", TRAIN);# save to folder
 
 ## TESTING DATA GENERATION AND EXPORT (CHOOSE)
