@@ -1,16 +1,22 @@
-function datagen_real(resol::Int, n::Int, J; pc::Bool=false)
-    c_train = randn32(J |> length, n)
-    ϕ_train = Array{Float32}(undef, (resol, resol, 1, n))# preallocation of the array
-    if pc == true
+"""
+    datagen_real(resol::Int, n::Int, orders; pc::Bool=false)
+
+Function to generate ``n`` images of ``resol`` resolution using ``orders`` of Zernike polynomials.\\
+``pc`` is a Bool to define wether multithreading is used or not.
+"""
+function datagen_real(resol::Int, n::Int, orders=J; smt::Bool=false)
+    coef = randn32(orders |> length, n)
+    ϕ = Array{Float32}(undef, (resol, resol, 1, n))# preallocation of the array
+    if smt == true
         Threads.@threads for ii ∈ 1:n# evaluate with data
-            ϕ_train[:, :, 1, ii] = evaluateZernike(resol, J, c_train[:, ii])
+            ϕ[:, :, 1, ii] = evaluateZernike(resol, orders, coef[:, ii])
         end
-    elseif pc == false
+    elseif smt == false
         for ii ∈ 1:n# evaluate with data
-            ϕ_train[:, :, 1, ii] = evaluateZernike(resol, J, c_train[:, ii])
+            ϕ[:, :, 1, ii] = evaluateZernike(resol, orders, coef[:, ii])
         end
     end
-    DATA_train = ϕ_train, c_train# create the training dataset tuple
+    DATA_train = ϕ, coef# create the training dataset tuple
     return DATA_train
 end
 datagen_real(2, 1, [0]);
@@ -41,53 +47,57 @@ function lnr(s::String)
     return A, h, (X_r, Y_r)
 end
 =#
-function test_real_single(input::Array{<:AbstractFloat,2}, J, name::String)
-    BSON.@load name * ".bson" model
-    model = model |> gpu
-    input = reshape(input, (res, res, 1, 1))
-    out::Vector{Float64} = input |> gpu |> model |> cpu |> vec
-    ϕ::Array{Float32,2} = evaluateZernike(res, J, out)
-    return out, ϕ
+"""
+    sample_real(np::Int, orders)
+
+Generate a single sample ``resol`` resolution image using ``orders`` orders of Zernike polynomials.
+"""
+function sample_real(resol::Int, orders=J)
+    coef = randn32(orders |> length)
+    ϕ = evaluateZernike(resol, orders, coef)
+    return coef, ϕ
 end
-function test_real(input::Array{<:AbstractFloat,4}, J, name::String)
-    BSON.@load name * ".bson" model
-    model = model |> gpu
-    out::Vector{Float64} = input |> gpu |> model |> cpu |> vec
-    ϕ::Array{Float32,2} = evaluateZernike(res, J, out)
-    return out, ϕ
+sample_real(2, [0]);
+"""
+    test_real(input, orders, name::String)
+
+Test multiple images to decompose into Zernike coefficients.
+"""
+function test_real(input::Array{<:AbstractFloat,4}, model_name::String)
+    BSON.@load model_name * ".bson" model
+    m = model |> gpu
+    out = input |> gpu |> m |> cpu
+    CUDA.reclaim()
+    #ϕ::Array{Float32,2} = evaluateZernike(res, orders, out)
+    return out#, ϕ
 end
-function test_real(input::Array{<:AbstractFloat,2}, J, name::String)
-    return test_real(reshape(input, (res, res, 1, 1)), J, name)
+function test_real(input::Array{<:AbstractFloat,2}, model_name::String)
+    return test_real(reshape(input, (res, res, 1, 1)), model_name)
 end
-function test_real_CPU(input::Array{<:AbstractFloat,2}, J, name::String)
-    BSON.@load name * ".bson" model
-    input = reshape(input, (res, res, 1, 1))
-    out::Vector{Float64} = input |> model |> vec
-    ϕ::Array{Float32,2} = evaluateZernike(res, J, out)
-    return out, ϕ
+"""
+    test_real_CPU(input::Array{<:AbstractFloat,2}, orders, name::String)
+
+Test a single image to decompose into Zernike coefficients.
+"""
+function test_real_CPU(input::Array{<:AbstractFloat,4}, model_name::String)
+    BSON.@load model_name * ".bson" model
+    #input = reshape(input, (res, res, 1, 1))
+    out = input |> model
+    #ϕ::Array{Float32,2} = evaluateZernike(res, orders, out)
+    return out#, ϕ
 end
-function sample_real(np::Int, J)
-    C = randn32(J |> length)
-    ϕ = evaluateZernike(np, J, C)
-    return C, ϕ
+function test_real_CPU(input::Array{<:AbstractFloat,2}, model_name::String)
+    return test_real_CPU(reshape(input, (res, res, 1, 1)), model_name)
 end
-function validation_real(data, model::String, mode::Symbol=:CPU; pc::Bool=false)
-    ϕs, C = data
-    out = C |> similar
+function validation_real(data, model_name::String; mode::Symbol=:CPU)
+    ϕs, coef = data
     if mode == :CPU
-        if pc == false
-            for ii ∈ axes(ϕs, 3)
-                out[:, ii], _ = test_real_CPU(ϕs[:, :, ii], J, model)
-            end
-        elseif pc == true
-            Threads.@threads for ii ∈ axes(ϕs, 3)
-                out[:, ii], _ = test_real_CPU(ϕs[:, :, ii], J, model)
-            end
-        end
+        out = test_real_CPU(ϕs, model_name)
     elseif mode == :GPU
-        for ii ∈ axes(ϕs, 3)
-            out[:, ii], _ = test_real_single(ϕs[:, :, ii], J, model)
+        if CUDA.has_cuda_gpu() == false
+            error("No CUDA GPU found... exiting function, please set mode=:CPU.")
         end
+        out = test_real(ϕs, model_name)
     end
-    return mean(isapprox.(out, C, rtol=0.1)), (out .- C) .|> (x -> x^2) |> mean |> sqrt, out, C
+    return mean(isapprox.(out, coef, rtol=0.1)), (out .- coef) .^ 2 |> mean |> sqrt, (out, coef)
 end

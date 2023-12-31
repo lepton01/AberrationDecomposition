@@ -12,7 +12,7 @@ const num_train::Int = 5_000# number of training data
 const num_test::Int = 1_000# number of testing data
 const iter::Int = 50# number of epochs to train
 const x = range(-1.0f0, 1.0f0, res)# to evaluate the Zernike Polynomials
-model_name::String = "conv_real_$(res)_004_$(length(J))order"# name of the model to use
+model_name::String = "conv_real_$(res)_004_$(J |> length)order"# name of the model to use
 "model_real_$(res).jl" |> include
 "train.jl" |> include
 "fun_real.jl" |> include
@@ -23,17 +23,17 @@ model_name::String = "conv_real_$(res)_004_$(length(J))order"# name of the model
 
 ## TRAINING DATA GENERATION AND EXPORT (CHOOSE)
 @time TRAIN = datagen_real(res, num_train, J);# false to use single-threading
-@time TRAIN = datagen_real(res, num_train, J, true);# true to use multi-threading
-Serialization.serialize("$(res)_real_train_$(num_train)_$(length(J))_order", TRAIN);# save to folder
+@time TRAIN = datagen_real(res, num_train, J, pc=true);# true to use multi-threading
+Serialization.serialize("$(res)_real_train_$(num_train)_$(J |> length)_order", TRAIN);# save to folder
 
 ## TESTING DATA GENERATION AND EXPORT (CHOOSE)
 @time TEST = datagen_real(res, num_test, J);# false (use single-threading)
 @time TEST = datagen_real(res, num_test, J, true);# true (use multi-threading)
-Serialization.serialize("$(res)_real_test_$(num_test)_$(length(J))order", TEST);# save to folder
+Serialization.serialize("$(res)_real_test_$(num_test)_$(J |> length)order", TEST);# save to folder
 
 ## TRAINING
 function train(n, model::String)
-    TRAIN = Serialization.deserialize("$(res)_real_train_$(num_train)_$(length(J))_order")
+    TRAIN = Serialization.deserialize("$(res)_real_train_$(num_train)_$(J |> length)_order")
     n_r = rand(1:num_train, n)
     TRAIN = TRAIN[1][:, :, :, n_r], TRAIN[2][:, n_r]
     return coefftrain!(TRAIN, model, ep=iter, bs=32)
@@ -43,7 +43,7 @@ coefftrain!(TRAIN, model_name, ep=iter, bs=32)
 
 ## TESTING
 function testing(n, model, mode=:CPU)
-    data = Serialization.deserialize("$(res)_real_test_$(num_test)_$(length(J))order")
+    data = Serialization.deserialize("$(res)_real_test_$(num_test)_$(J |> length)order")
     n_r = rand(1:num_test, n)
     data = data[1][:, :, 1, n_r], data[2][:, n_r]
     return validation_real(data, model, mode)
@@ -61,14 +61,14 @@ aa = vec((coefs[1] .- coefs[2]) ./ coefs[2]);
 Plots.histogram(aa, legend=false)
 
 ## TESTING 2
-data_test = Serialization.deserialize("$(res)_real_test_$(num_test)_$(length(J))order");
-data_test = data_test[1][:, :, 1, :], data_test[2][:, :];
+data_test = Serialization.deserialize("$(res)_real_test_$(num_test)_$(J |> length)order");
+#data_test = data_test[1][:, :, 1, :], data_test[2][:, :];
 
 n_r = rand(1:num_test, 1_000);
-data_test = data_test[1][:, :, 1, n_r], data_test[2][:, n_r];
+data_test = data_test[1][:, :, :, n_r], data_test[2][:, n_r];
 
-@time acc, error_cuad_medio, OUT, coefs = validation_real(data_test, model_name)
-@time acc, error_cuad_medio, OUT, coefs = validation_real(data_test, model_name, :GPU)
+@time acc, error_cuad_medio, coefs = validation_real(data_test, model_name)
+@time acc, error_cuad_medio, coefs = validation_real(data_test, model_name, mode=:GPU)
 aa = vec((coefs[1] .- coefs[2]) ./ coefs[2]);
 Plots.histogram(aa, legend=false)
 #=
@@ -107,8 +107,8 @@ Plots.heatmap(heat1, ascpect_ratio=1, xlabel="x", ylabel="y", title="Preprocesse
 #Plots.heatmap(x, x, evaluateZernike(128, [2], [1.0]), aspect_ratio=1)
 =#
 ## VALIDATION (SINGLE)
-@time coef, B, P = sample_real(res, J)
-@time C, F0, p0 = test_real(B, J, model_name);
+@time coef, B = sample_real(res, J)
+@time C, F0 = test_real(B, J, model_name);
 P
 Plots.plot(p0, aspect_ratio=1, ylabel="px", xlabel="px")
 Plots.plot([coef C], label=["input" "output"], linewidth=2, xlabel="Zernike OSA index (1-$(J |> length))", ylabel="value")
